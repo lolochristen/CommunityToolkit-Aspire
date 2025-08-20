@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../src/CommunityToolkit.Aspire.Hosting.Zitadel/CommunityToolkit.Aspire.Hosting.Zitadel.csproj" IsAspireProjectResource="False" />
+    <ProjectReference Include="..\CommunityToolkit.Aspire.Hosting.Zitadel.Web\CommunityToolkit.Aspire.Hosting.Zitadel.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

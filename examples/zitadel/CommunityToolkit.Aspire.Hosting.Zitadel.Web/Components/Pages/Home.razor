@@ -1,0 +1,28 @@
+﻿@page "/"
+@using global::Zitadel.Api
+@using global::Zitadel.Credentials
+@using global::Zitadel.Management.V1
+@using global::Zitadel.Org.V2
+
+@rendermode InteractiveServer
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+<AuthorizeView>
+    <Authorized>
+        <p>
+            <span class="username">@context.User.Identity?.Name</span>
+            @foreach (var claim in context.User.Claims)
+            {
+                <div>@claim.Type: @claim.Value</div>
+            }
+        </p>
+    </Authorized>
+    <NotAuthorized>
+        <NavLink class="btn btn-link login" href="/login">Login</NavLink>
+    </NotAuthorized>
+</AuthorizeView>

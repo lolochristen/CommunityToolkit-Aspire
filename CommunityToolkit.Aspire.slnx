@@ -150,6 +150,8 @@
   </Folder>
   <Folder Name="/examples/zitadel/">
     <Project Path="examples/zitadel/CommunityToolkit.Aspire.Hosting.Zitadel.AppHost/CommunityToolkit.Aspire.Hosting.Zitadel.AppHost.csproj" />
+    <Project Path="examples/zitadel/CommunityToolkit.Aspire.Hosting.Zitadel.ServiceDefaults/CommunityToolkit.Aspire.Hosting.Zitadel.ServiceDefaults.csproj" />
+    <Project Path="examples/zitadel/CommunityToolkit.Aspire.Hosting.Zitadel.Web/CommunityToolkit.Aspire.Hosting.Zitadel.Web.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/CommunityToolkit.Aspire.EventStore/CommunityToolkit.Aspire.EventStore.csproj" />

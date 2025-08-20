@@ -14,11 +14,16 @@ dotnet add package CommunityToolkit.Aspire.Hosting.Zitadel
 
 ### Example usage
 
-Then, in the _Program.cs_ file of `AppHost`, define an Redis resource, then call `AddZitadel`:
+Then, in the _Program.cs_ file of `AppHost`, define an Zitadel resource, then call `AddZitadel`:
 
 ```csharp
-var zitadel = builder.AddZitadel("redis")
-    
+var zitadel = builder.AddZitadel("zitadel")
+    .WithHttpsEndpointUsingDevCertificate(8443)
+    .WithExternalHttpEndpoints()
+    .WithPostgresDatabase(database)
+    .WithOrganizationName("ASPIRE")
+    .WithMachineUser()
+   
 ```
 
 ## Additional Information

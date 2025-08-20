@@ -1,3 +1,4 @@
+using Zitadel.Api;
 using Zitadel.App.V1;
 using Zitadel.Management.V1;
 using Zitadel.Org.V2;
@@ -9,43 +10,54 @@ var postgres = builder.AddPostgres("postgres");
 var database = postgres.AddDatabase("zitadel-db", "zitadel");
 
 string clientId = "?";
+string clientSecret = "?";
 
 var zitadel = builder.AddZitadel("zitadel")
     .WithHttpsEndpointUsingDevCertificate(8501)
     .WithExternalHttpEndpoints()
     .WithPostgresDatabase(database)
-    .WithOrganizationName("TESTO")
+    .WithOrganizationName("ASPIRE")
     .WithMachineUser()
-    .WithInitialization(async (options, _) =>
-    {
-        var orgService = Zitadel.Api.Clients.OrganizationService(options);
-        var orgs = await orgService.ListOrganizationsAsync(new ListOrganizationsRequest());
+    .WithInitialization(InitializeZitadel);
 
-        var org = orgs.Result[0];
-        Console.WriteLine($"Org: {org.Name} {org.Id}");
-    });
+var project = zitadel.AddProject("zitadel-project", "Aspire")
+   .WithInitialization(InitializeProject);
 
-var project = zitadel.AddProject("test1", "test1")
-   .WithInitialization(async (options, resource) =>
-   {
-       var project = (ZitadelProjectResource) resource;
-
-       var managementService = Zitadel.Api.Clients.ManagementService(options);
-
-       var oidcAppRequest = new AddOIDCAppRequest() { AppType = OIDCAppType.Web, Name = "WebApp", ProjectId = project.ProjectId, AccessTokenType = OIDCTokenType.Jwt};
-       oidcAppRequest.RedirectUris.Add("https://localhost:8502/signin-oidc");
-       var oidcApp = await managementService.AddOIDCAppAsync(oidcAppRequest);
-       
-       clientId = oidcApp.ClientId;
-   });
-
-// test container
-builder.AddContainer("webapp", "whalesalad/docker-debug", "latest")
-    .WithHttpEndpoint(8502, 8080)
+builder.AddProject<Projects.CommunityToolkit_Aspire_Hosting_Zitadel_Web>("webfrontend")
+    .WithExternalHttpEndpoints()
+    .WithHttpHealthCheck("/health")
     .WithReference(zitadel)
-    .WithEnvironment("OIDC_AUTHORITY", () => zitadel.Resource.PrimaryEndpoint.Url)
-    .WithEnvironment("OIDC_CLIENT_ID", () => clientId)
-    .WithEnvironment("PROJECT_ID", () => project.Resource.ProjectId ?? "?")
+    .WithEnvironment("OpenIDConnectSettings__Authority", zitadel.Resource.PrimaryEndpoint)
+    .WithEnvironment("OpenIDConnectSettings__ClientId", () => clientId)
+    .WithEnvironment("OpenIDConnectSettings__ClientSecret", () => clientSecret)
     .WaitFor(project);
 
 await builder.Build().RunAsync();
+
+async Task InitializeZitadel(Clients.Options options, IResource _)
+{
+    var orgService = Clients.OrganizationService(options);
+    var organizations = await orgService.ListOrganizationsAsync(new ListOrganizationsRequest());
+    var organization = organizations.Result[0];
+    Console.WriteLine($"Org: {organization.Name} {organization.Id}");
+}
+
+async Task InitializeProject(Clients.Options options, IResource resource)
+{
+    var project = (ZitadelProjectResource)resource;
+    var managementService = Clients.ManagementService(options);
+
+    var oidcAppRequest = new AddOIDCAppRequest()
+    {
+        AppType = OIDCAppType.Web,
+        Name = "webfrontend-oidc",
+        ProjectId = project.ProjectId,
+        AccessTokenType = OIDCTokenType.Jwt,
+        AuthMethodType = OIDCAuthMethodType.Basic
+    };
+    oidcAppRequest.RedirectUris.Add("https://localhost:8502/signin-zitadel");
+    var oidcApp = await managementService.AddOIDCAppAsync(oidcAppRequest);
+
+    clientId = oidcApp.ClientId;
+    clientSecret = oidcApp.ClientSecret;
+}
