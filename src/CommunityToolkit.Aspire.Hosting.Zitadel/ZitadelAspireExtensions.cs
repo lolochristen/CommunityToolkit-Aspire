@@ -16,6 +16,7 @@ namespace Aspire.Hosting;
 public static class ZitadelAspireExtensions
 {
     private const int DefaultContainerPort = 8080;
+    private const string DatabaseToken = "Database=";
 
     /// <summary>
     /// </summary>
@@ -95,48 +96,64 @@ public static class ZitadelAspireExtensions
     /// <summary>
     /// </summary>
     /// <param name="builder"></param>
-    /// <param name="databaseResource"></param>
+    /// <param name="database"></param>
     /// <param name="userPassword"></param>
     /// <param name="sslModeEnabled"></param>
     /// <returns></returns>
     public static IResourceBuilder<ZitadelResource> WithPostgresDatabase(this IResourceBuilder<ZitadelResource> builder,
-        IResourceBuilder<IResourceWithConnectionString> databaseResource, IResourceBuilder<ParameterResource>? userPassword = null, bool sslModeEnabled = false)
+        IResourceBuilder<IResourceWithConnectionString> database, IResourceBuilder<ParameterResource>? userPassword = null, bool sslModeEnabled = false)
     {
         ParameterResource userPasswordParameter = userPassword?.Resource ??
                                                   ParameterResourceBuilderExtensions.CreateDefaultPasswordParameter(builder.ApplicationBuilder,
-                                                      $"{databaseResource.Resource.Name}-user-password");
+                                                      $"{database.Resource.Name}-user-password");
 
-        builder.WithEnvironment(async context =>
+        builder.WithEnvironment(context =>
             {
-                string? connectionString = await databaseResource.Resource.GetConnectionStringAsync();
-                DbConnectionStringBuilder connectionStringBuilder = new() { ConnectionString = connectionString };
-                // Example: Host=postgres;Port=5432;Username=postgres;Password=4uXdD-QAs5jKa8ju8-uDAE;Database=zitadel
-
-                // workaround to resolve container internal host and post, default resolving only return external host and port
-                ContainerResource? serverContainerResource = databaseResource.Resource is IResourceWithParent parentResource
-                    ? parentResource.Parent as ContainerResource
-                    : databaseResource.Resource as ContainerResource;
-                if (serverContainerResource != null)
+                // extract the server parameters generically from IResourceWithConnectionString to support different postgres resources
+                IResourceWithConnectionString serverResource;
+                if (database.Resource is IResourceWithParent parentResource)
                 {
+                    serverResource = (IResourceWithConnectionString) parentResource.Parent;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Parameter must be a database resource created from a parent server resource.");
+                }
+
+                var part = database.Resource.ConnectionStringExpression.ValueExpression.Split(';').FirstOrDefault(p => p.StartsWith(DatabaseToken));
+                if (part == null)
+                {
+                    throw new InvalidOperationException("could not parse ConnectionString for database name");
+                }
+                var databaseName = part.Substring(DatabaseToken.Length);
+
+                // Assumption: ConnectionStrings are using ValueProvider in the format: "Host=host;Port=port;Username=username;Password=password;Database=database"
+                if (serverResource.ConnectionStringExpression.ValueProviders.Count < 4)
+                {
+                    throw new InvalidOperationException("server of database has not proper connection string format");
+                }
+
+                if (context.ExecutionContext.IsRunMode && serverResource is ContainerResource serverContainerResource)
+                {
+                    // workaround to resolve container internal host and port, default resolving only returns external host and port
                     context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_PORT"] = serverContainerResource.GetEndpoint("tcp").Property(EndpointProperty.TargetPort);
                     context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_HOST"] = serverContainerResource.Name; // use name 
                 }
                 else
                 {
-                    context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_HOST"] = connectionStringBuilder["Host"]?.ToString() ?? "localhost";
-                    context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_PORT"] = connectionStringBuilder["Port"]?.ToString() ?? "5432";
+                    context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_HOST"] = serverResource.ConnectionStringExpression.ValueProviders[0]; 
+                    context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_PORT"] = serverResource.ConnectionStringExpression.ValueProviders[1];
                 }
-
-                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_DATABASE"] = connectionStringBuilder["Database"]?.ToString() ?? "zitadel";
+                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_DATABASE"] = databaseName;
                 context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_USER_USERNAME"] = "zitadel-user";
                 context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_USER_PASSWORD"] = userPasswordParameter;
                 context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE"] = sslModeEnabled ? "enable" : "disable";
-                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME"] = connectionStringBuilder["Username"]?.ToString() ?? "postgres";
-                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD"] = connectionStringBuilder["Password"]?.ToString() ?? "postgres";
+                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME"] = serverResource.ConnectionStringExpression.ValueProviders[2];
+                context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD"] = serverResource.ConnectionStringExpression.ValueProviders[3];
                 context.EnvironmentVariables["ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE"] = sslModeEnabled ? "enable" : "disable";
             })
-            .WithReference(databaseResource)
-            .WaitFor(databaseResource);
+            .WithReference(database)
+            .WaitFor(database);
 
         return builder;
     }
