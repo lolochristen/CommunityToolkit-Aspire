@@ -12,11 +12,12 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
     : ContainerResource(name), IResourceWithServiceDiscovery
 {
     private const string DefaultAdmin = "root";
-    internal const string PrimaryEndpointName = "https";
 
     private readonly Dictionary<string, string> _projects = new(StringComparer.InvariantCultureIgnoreCase);
 
     private EndpointReference? _primaryEndpoint;
+
+    internal string PrimaryEndpointName { get; set; } = "http";
 
     /// <summary>
     /// Gets the primary endpoint for the Grafana k6 instance.

@@ -42,8 +42,6 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
     });
 
-
-
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 

@@ -22,4 +22,5 @@ public class ZitadelProjectResource(string name, AddProjectRequest projectReques
     /// <summary>
     /// </summary>
     public ZitadelResource Parent { get; } = parent;
+    
 }

@@ -39,7 +39,7 @@ public static class ZitadelResourceExtensions
         var serviceAccount = zitadel.GetMachinServiceAccount();
 
         ITokenProvider tokenProvider = ITokenProvider.ServiceAccount(
-            zitadel.GetEndpoint("https").Url,
+            zitadel.PrimaryEndpoint.Url,
             serviceAccount,
             new ServiceAccount.AuthOptions { ApiAccess = true });
 
