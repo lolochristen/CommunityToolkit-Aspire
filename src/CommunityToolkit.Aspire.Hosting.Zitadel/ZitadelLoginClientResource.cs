@@ -19,7 +19,7 @@ public class ZitadelLoginClientResource(string name)
     /// <summary>
     /// Gets the Zitadel base endpoint reference.
     /// </summary>
-    public ReferenceExpression BaseEndpoint => ReferenceExpression.Create($"{PrimaryEndpoint}{BasePath}");
+    public ReferenceExpression BaseEndpoint => ReferenceExpression.Create($"{PrimaryEndpoint.Property(EndpointProperty.Url)}{BasePath}");
 
     /// <summary>
     /// Gets the OpenID Connect login endpoint reference.
