@@ -9,7 +9,8 @@ namespace Aspire.Hosting.ApplicationModel;
 /// <param name="name"></param>
 /// <param name="projectRequest"></param>
 /// <param name="parent"></param>
-public class ZitadelProjectResource(string name, AddProjectRequest projectRequest, ZitadelResource parent) : Resource(name), IResourceWithParent<ZitadelResource>, IResourceWithWaitSupport
+public class ZitadelProjectResource(string name, AddProjectRequest projectRequest, ZitadelResource parent)
+    : Resource(name), IResourceWithParent<ZitadelResource>, IResourceWithWaitSupport
 {
     /// <summary>
     /// </summary>
@@ -22,5 +23,4 @@ public class ZitadelProjectResource(string name, AddProjectRequest projectReques
     /// <summary>
     /// </summary>
     public ZitadelResource Parent { get; } = parent;
-    
 }

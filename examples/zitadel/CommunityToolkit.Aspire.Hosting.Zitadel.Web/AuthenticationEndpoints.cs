@@ -11,12 +11,10 @@ public static class AuthenticationEndpoints
     {
         app.MapGet("/login", async context =>
         {
-            var returnUrl = context.Request.Query["returnUrl"];
+            StringValues returnUrl = context.Request.Query["returnUrl"];
 
-            await context.ChallengeAsync(ZitadelDefaults.AuthenticationScheme, new AuthenticationProperties
-            {
-                RedirectUri = returnUrl == StringValues.Empty ? "/" : returnUrl.ToString()
-            });
+            await context.ChallengeAsync(ZitadelDefaults.AuthenticationScheme,
+                new AuthenticationProperties { RedirectUri = returnUrl == StringValues.Empty ? "/" : returnUrl.ToString() });
         }).AllowAnonymous();
 
         app.MapPost("/logout", async context =>
@@ -34,5 +32,4 @@ public static class AuthenticationEndpoints
 
         return app;
     }
-
 }

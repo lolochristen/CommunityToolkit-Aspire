@@ -3,7 +3,7 @@
 
 <div class="page">
     <div class="sidebar">
-        <NavMenu />
+        <NavMenu/>
     </div>
 
     <main>
@@ -35,8 +35,10 @@
 </div>
 
 @code {
+
     private async Task Logout()
     {
         await JS.InvokeVoidAsync("logoutForm.submit");
     }
+
 }

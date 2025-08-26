@@ -1,11 +1,11 @@
-using Microsoft.AspNetCore.Authentication.Cookies;
 using CommunityToolkit.Aspire.Hosting.Zitadel.ServiceDefaults;
 using CommunityToolkit.Aspire.Hosting.Zitadel.Web;
 using CommunityToolkit.Aspire.Hosting.Zitadel.Web.Components;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Zitadel.Authentication;
 using Zitadel.Extensions;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
@@ -17,7 +17,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddOutputCache();
 builder.Services.AddDistributedMemoryCache();
 
-var oidcConfig = builder.Configuration.GetSection("OpenIDConnectSettings");
+IConfigurationSection oidcConfig = builder.Configuration.GetSection("OpenIDConnectSettings");
 
 builder.Services.AddAuthentication(options =>
     {
@@ -45,11 +45,11 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseExceptionHandler("/Error", true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }

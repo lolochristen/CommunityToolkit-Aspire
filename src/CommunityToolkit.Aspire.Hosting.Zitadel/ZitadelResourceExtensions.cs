@@ -5,12 +5,12 @@ using Zitadel.Credentials;
 namespace Aspire.Hosting.ApplicationModel;
 
 /// <summary>
-/// Extensions for <see cref="ZitadelResource"/> to provide easy access to service accounts and client options.
+///     Extensions for <see cref="ZitadelResource" /> to provide easy access to service accounts and client options.
 /// </summary>
 public static class ZitadelResourceExtensions
 {
     /// <summary>
-    /// Gets the machine service account from the Zitadel resource.
+    ///     Gets the machine service account from the Zitadel resource.
     /// </summary>
     /// <param name="zitadel"></param>
     /// <returns></returns>
@@ -28,7 +28,7 @@ public static class ZitadelResourceExtensions
     }
 
     /// <summary>
-    /// Creates an API client options instance for the Zitadel resource using the machine service account.
+    ///     Creates an API client options instance for the Zitadel resource using the machine service account.
     /// </summary>
     /// <param name="zitadel"></param>
     /// <returns></returns>
@@ -36,7 +36,7 @@ public static class ZitadelResourceExtensions
     {
         ArgumentNullException.ThrowIfNull(zitadel);
 
-        var serviceAccount = zitadel.GetMachinServiceAccount();
+        ServiceAccount serviceAccount = zitadel.GetMachinServiceAccount();
 
         ITokenProvider tokenProvider = ITokenProvider.ServiceAccount(
             zitadel.PrimaryEndpoint.Url,
@@ -46,5 +46,4 @@ public static class ZitadelResourceExtensions
         Clients.Options options = new(zitadel.PrimaryEndpoint.Url, tokenProvider);
         return options;
     }
-
 }

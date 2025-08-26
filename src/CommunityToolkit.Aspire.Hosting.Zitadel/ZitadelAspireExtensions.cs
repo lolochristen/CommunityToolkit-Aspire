@@ -15,6 +15,7 @@ namespace Aspire.Hosting;
 public static class ZitadelAspireExtensions
 {
     private const int DefaultContainerPort = 8080;
+    private const int DefaultContainerPortLoginClient = 3000;
     private const string DatabaseToken = "Database=";
 
     /// <summary>
@@ -36,7 +37,7 @@ public static class ZitadelAspireExtensions
                                                ParameterResourceBuilderExtensions.CreateGeneratedParameter(builder, $"{name}-masterkey", true,
                                                    new GenerateParameterDefault { MinLength = 32 });
 
-        var zitadel = new ZitadelResource(name, adminUsername?.Resource, passwordParameter, masterKeyParameter);
+        ZitadelResource zitadel = new(name, adminUsername?.Resource, passwordParameter, masterKeyParameter);
 
         return builder
             .AddResource(zitadel)
@@ -121,13 +122,13 @@ public static class ZitadelAspireExtensions
                     throw new InvalidOperationException("Parameter must be a database resource created from a parent server resource.");
                 }
 
-                var part = database.Resource.ConnectionStringExpression.ValueExpression.Split(';').FirstOrDefault(p => p.StartsWith(DatabaseToken));
+                string? part = database.Resource.ConnectionStringExpression.ValueExpression.Split(';').FirstOrDefault(p => p.StartsWith(DatabaseToken));
                 if (part == null)
                 {
                     throw new InvalidOperationException("could not parse ConnectionString for database name");
                 }
 
-                var databaseName = part.Substring(DatabaseToken.Length);
+                string databaseName = part.Substring(DatabaseToken.Length);
 
                 // Assumption: ConnectionStrings are using ValueProvider in the format: "Host=host;Port=port;Username=username;Password=password;Database=database"
                 if (serverResource.ConnectionStringExpression.ValueProviders.Count < 4)
@@ -177,6 +178,7 @@ public static class ZitadelAspireExtensions
             {
                 Directory.CreateDirectory(path);
             }
+
             builder.WithBindMount(path, "/keys");
         }
 
@@ -244,14 +246,13 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// 
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="port"></param>
     /// <returns></returns>
     public static IResourceBuilder<ZitadelResource> WithHttpEndpoint(this IResourceBuilder<ZitadelResource> builder, int? port = null)
     {
-        return builder.WithHttpEndpoint(port, targetPort: DefaultContainerPort)
+        return builder.WithHttpEndpoint(port, DefaultContainerPort)
             .WithEnvironment("ZITADEL_TLS_ENABLED", "false")
             .WithEnvironment("ZITADEL_EXTERNALSECURE", "false")
             .WithEnvironment("ZITADEL_EXTERNALPORT", builder.GetEndpoint("http").Property(EndpointProperty.Port))
@@ -259,7 +260,6 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// 
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="loginUser"></param>
@@ -274,6 +274,7 @@ public static class ZitadelAspireExtensions
             {
                 Directory.CreateDirectory(path);
             }
+
             builder.WithBindMount(path, "/keys");
         }
 
@@ -287,45 +288,63 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// 
     /// </summary>
     /// <param name="zitadel"></param>
     /// <param name="name"></param>
     /// <param name="port"></param>
     /// <param name="loginUser"></param>
+    /// <param name="serviceAccessToken"></param>
     /// <returns></returns>
-    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> zitadel, string name, int? port = null, string loginUser = "login-client")
+    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> zitadel, string name, int? port = null,
+        string loginUser = "login-client", IResourceBuilder<ParameterResource>? serviceAccessToken = null)
     {
-        var loginClientResource = new ZitadelLoginClientResource(name);
-
         string path = Path.GetFullPath($"./{zitadel.Resource.Name}-keys");
 
-        var login = zitadel.ApplicationBuilder.AddResource(loginClientResource)
+        ParameterResource serviceAccessTokenParameter = serviceAccessToken?.Resource ??
+                                                        new ParameterResource(name, @default => File.ReadAllText(Path.Combine(path, $"{loginUser}.pat")), true);
+
+        ZitadelLoginClientResource loginClientResource = new(name, serviceAccessTokenParameter);
+
+        IResourceBuilder<ZitadelLoginClientResource> login = zitadel.ApplicationBuilder.AddResource(loginClientResource)
             .WithImage(ZitadelContainerImageTags.LoginImage)
             .WithImageRegistry(ZitadelContainerImageTags.Registry)
             .WithImageTag(ZitadelContainerImageTags.LoginTag)
-            .WithHttpEndpoint(port, 3000)
-            .WithBindMount(path, "/keys")
+            .WithHttpEndpoint(port, DefaultContainerPortLoginClient)
             .WithEnvironment("ZITADEL_API_URL", zitadel.Resource.PrimaryEndpoint)
             .WithEnvironment("NEXT_PUBLIC_BASE_PATH", ZitadelLoginClientResource.BasePath)
-            .WithEnvironment("ZITADEL_SERVICE_USER_TOKEN_FILE", $"/keys/{loginUser}.pat")
+            .WithEnvironment("ZITADEL_SERVICE_USER_TOKEN", serviceAccessTokenParameter)
             .WithEnvironment("NODE_TLS_REJECT_UNAUTHORIZED", "0")
             .WithEnvironment("CUSTOM_REQUEST_HEADERS", "Host:localhost")
             .WithHttpHealthCheck(ZitadelLoginClientResource.BasePath + "/healthy", 200)
             .WaitFor(zitadel);
 
         zitadel.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
-            .WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI", login.Resource.BaseEndpoint)
-            .WithEnvironment("ZITADEL_OIDC_DEFAULTLOGINURLV2", login.Resource.OidcLoginEndpoint)
-            .WithEnvironment("ZITADEL_OIDC_DEFAULTLOGOUTURLV2", login.Resource.OidcLogoutEndpoint)
-            .WithEnvironment("ZITADEL_SAML_DEFAULTLOGINURLV2", login.Resource.SamlLoginEndpoint);
+            .WithEnvironment(async context =>
+            {
+                // workaround to resolve external address of login client
+                if (zitadel.ApplicationBuilder.ExecutionContext.IsRunMode)
+                {
+                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] =
+                        await login.Resource.BaseEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = await login.Resource.OidcLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = await login.Resource.OidcLogoutEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = await login.Resource.SamlLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                }
+                else
+                {
+                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = login.Resource.BaseEndpoint;
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = login.Resource.OidcLoginEndpoint;
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = login.Resource.OidcLogoutEndpoint;
+                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = login.Resource.SamlLoginEndpoint;
+                }
+            });
 
         return login;
     }
-    
+
 
     /// <summary>
-    /// Initializes the Zitadel resource with the provided initialization function.
+    ///     Initializes the Zitadel resource with the provided initialization function.
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="initialization"></param>
@@ -355,7 +374,7 @@ public static class ZitadelAspireExtensions
     /// <returns></returns>
     public static IResourceBuilder<ZitadelProjectResource> AddProject(this IResourceBuilder<ZitadelResource> builder, string name, string projectName)
     {
-        return builder.AddProject(name, new AddProjectRequest() { Name = projectName });
+        return builder.AddProject(name, new AddProjectRequest { Name = projectName });
     }
 
     /// <summary>
@@ -383,7 +402,7 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// Sets the organization name for the ZITADEL instance.
+    ///     Sets the organization name for the ZITADEL instance.
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="organizationName"></param>
@@ -398,7 +417,7 @@ public static class ZitadelAspireExtensions
     {
         await resourceNotificationService.PublishUpdateAsync(zitadelProject,
             state => state with { State = new ResourceStateSnapshot(KnownResourceStates.Starting, KnownResourceStateStyles.Info) });
-        
+
         ManagementService.ManagementServiceClient managementService = Clients.ManagementService(options);
 
         ListProjectsResponse? projects = await managementService.ListProjectsAsync(new ListProjectsRequest());
@@ -418,7 +437,6 @@ public static class ZitadelAspireExtensions
 
         zitadelProject.ProjectId = projectId;
 
-        
 
         zitadelProject.TryGetAnnotationsOfType<ZitadelInitializationAnnotation>(out IEnumerable<ZitadelInitializationAnnotation>? initAnnotations);
         if (initAnnotations != null)

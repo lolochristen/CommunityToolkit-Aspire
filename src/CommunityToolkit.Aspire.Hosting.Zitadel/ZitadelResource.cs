@@ -20,10 +20,10 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
     internal string PrimaryEndpointName { get; set; } = "http";
 
     /// <summary>
-    /// Gets the primary endpoint for the Grafana k6 instance.
-    /// This endpoint is used for all API calls over HTTP.
+    ///     Gets the primary endpoint for the Grafana k6 instance.
+    ///     This endpoint is used for all API calls over HTTP.
     /// </summary>
-    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new(this, PrimaryEndpointName);
+    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, PrimaryEndpointName);
 
     /// <summary>
     /// </summary>
@@ -50,7 +50,7 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
     public IReadOnlyDictionary<string, string> Projects => _projects;
 
     /// <summary>
-    /// Organization name used for the ZITADEL instance.
+    ///     Organization name used for the ZITADEL instance.
     /// </summary>
     public string OrganizationName { get; set; } = "ZITADEL";
 
