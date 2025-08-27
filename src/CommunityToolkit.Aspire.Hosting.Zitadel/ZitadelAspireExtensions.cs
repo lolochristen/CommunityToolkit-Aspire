@@ -22,11 +22,13 @@ public static class ZitadelAspireExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="name"></param>
+    /// <param name="useHttps"></param>
     /// <param name="adminUsername"></param>
     /// <param name="adminPassword"></param>
     /// <param name="masterKey"></param>
+    /// <param name="port"></param>
     /// <returns></returns>
-    public static IResourceBuilder<ZitadelResource> AddZitadel(this IDistributedApplicationBuilder builder, string name, IResourceBuilder<ParameterResource>? adminUsername = null,
+    public static IResourceBuilder<ZitadelResource> AddZitadel(this IDistributedApplicationBuilder builder, string name, int? port = null, bool useHttps = false, IResourceBuilder<ParameterResource>? adminUsername = null,
         IResourceBuilder<ParameterResource>? adminPassword = null, IResourceBuilder<ParameterResource>? masterKey = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -37,20 +39,20 @@ public static class ZitadelAspireExtensions
                                                ParameterResourceBuilderExtensions.CreateGeneratedParameter(builder, $"{name}-masterkey", true,
                                                    new GenerateParameterDefault { MinLength = 32 });
 
-        ZitadelResource zitadel = new(name, adminUsername?.Resource, passwordParameter, masterKeyParameter);
+        var zitadel = new ZitadelResource (name, adminUsername?.Resource, passwordParameter, masterKeyParameter, useHttps ? "https" : "http");
 
-        return builder
+        var zitadelBuilder = builder
             .AddResource(zitadel)
             .WithImage(ZitadelContainerImageTags.Image)
             .WithImageRegistry(ZitadelContainerImageTags.Registry)
             .WithImageTag(ZitadelContainerImageTags.Tag)
             // zitadel does not support generic otlp paramters yet, pending request to support it.
             // .WithOtlpExporter()
-            // current oltp parameters only support non-authorized endpoint on port 443.
+            // current oltp parameters only support non-authorized endpoints.
             // .WithEnvironment("ZITADEL_TRACING_TYPE", "otel")
             // .WithEnvironment("ZITADEL_TRACING_ENDPOINT", builder.Configuration.GetValue<string>("ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"))
             // .WithEnvironment("ZITADEL_TRACING_SERVICENAME", name)
-            .WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "false") // https://github.com/zitadel/zitadel/issues/10526
+            .WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "false") // when login client is used, parameters will be true
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED", "false")
             .WithEnvironment(context =>
             {
@@ -93,6 +95,23 @@ public static class ZitadelAspireExtensions
                     }
                 }
             });
+
+        if (useHttps)
+        {
+            zitadelBuilder.WithHttpsEndpoint(port, DefaultContainerPort)
+                .WithEnvironment("ZITADEL_TLS_ENABLED", "true")
+                .WithHttpHealthCheck("debug/healthz", endpointName: "https")
+                .WithExternalDomain("https");
+  }
+        else
+        {
+            zitadelBuilder.WithHttpEndpoint(port, DefaultContainerPort)
+                .WithEnvironment("ZITADEL_TLS_ENABLED", "false")
+                .WithHttpHealthCheck("debug/healthz", endpointName: "http")
+                .WithExternalDomain("http");
+        }
+
+        return zitadelBuilder;
     }
 
     /// <summary>
@@ -197,13 +216,11 @@ public static class ZitadelAspireExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="certificateDestinationPath"></param>
-    /// <param name="port"></param>
     /// <returns></returns>
-    public static IResourceBuilder<ZitadelResource> WithHttpsEndpointUsingDevCertificate(this IResourceBuilder<ZitadelResource> builder, int? port = null,
-        string certificateDestinationPath = "/certificate")
+    public static IResourceBuilder<ZitadelResource> WithDeveloperCertificate(this IResourceBuilder<ZitadelResource> builder, string certificateDestinationPath = "/certificate")
     {
         var (certPath, keyPath) = ExportDevCertificate(builder.ApplicationBuilder);
-        return builder.WithHttpsEndpoint(certPath, keyPath, port, certificateDestinationPath);
+        return builder.WithCertificate(certPath, keyPath, certificateDestinationPath);
     }
 
     /// <summary>
@@ -212,10 +229,8 @@ public static class ZitadelAspireExtensions
     /// <param name="certificatePath"></param>
     /// <param name="keyPath"></param>
     /// <param name="certificateDestinationPath"></param>
-    /// <param name="port"></param>
     /// <returns></returns>
-    public static IResourceBuilder<ZitadelResource> WithHttpsEndpoint(this IResourceBuilder<ZitadelResource> builder, string certificatePath, string keyPath, int? port = null,
-        string certificateDestinationPath = "/certificate")
+    public static IResourceBuilder<ZitadelResource> WithCertificate(this IResourceBuilder<ZitadelResource> builder, string certificatePath, string keyPath, string certificateDestinationPath = "/certificate")
     {
         string certFileName = Path.GetFileName(certificatePath);
         string certKeyFileName = Path.GetFileName(keyPath);
@@ -233,16 +248,48 @@ public static class ZitadelAspireExtensions
             builder.WithBindMount(sourceFullPath, certificateDestinationPath);
         }
 
-        builder.Resource.PrimaryEndpointName = "https";
+        return builder.WithEnvironment("ZITADEL_TLS_CERTPATH", certificateDestinationPath + "/" + certFileName)
+            .WithEnvironment("ZITADEL_TLS_KEYPATH", certificateDestinationPath + "/" + certKeyFileName);
+    }
 
-        return builder.WithHttpsEndpoint(port, DefaultContainerPort)
-            .WithEnvironment("ZITADEL_TLS_CERTPATH", certificateDestinationPath + "/" + certFileName)
-            .WithEnvironment("ZITADEL_TLS_KEYPATH", certificateDestinationPath + "/" + certKeyFileName)
-            .WithEnvironment("ZITADEL_TLS_ENABLED", "true")
-            .WithEnvironment("ZITADEL_EXTERNALSECURE", "true")
-            .WithEnvironment("ZITADEL_EXTERNALPORT", builder.GetEndpoint("https").Property(EndpointProperty.Port))
-            .WithEnvironment("ZITADEL_EXTERNALDOMAIN", builder.GetEndpoint("https").Property(EndpointProperty.Host))
-            .WithHttpHealthCheck("debug/healthz", endpointName: "https");
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="endpointName"></param>
+    /// <returns></returns>
+    public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, string endpointName)
+    {
+        var endpoint = builder.GetEndpoint(endpointName);
+        return builder.WithExternalDomain(endpoint);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="endpoint"></param>
+    /// <returns></returns>
+    public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, EndpointReference endpoint)
+    {
+        return builder.WithEnvironment("ZITADEL_EXTERNALSECURE", endpoint.Scheme == "https" ? "true" : "false")
+            .WithEnvironment("ZITADEL_EXTERNALPORT", endpoint.Property(EndpointProperty.Port))
+            .WithEnvironment("ZITADEL_EXTERNALDOMAIN", endpoint.Property(EndpointProperty.Host));
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="isSecure"></param>
+    /// <param name="host"></param>
+    /// <param name="port"></param>
+    /// <returns></returns>
+    public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, bool isSecure, string host, int port)
+    {
+        return builder.WithEnvironment("ZITADEL_EXTERNALSECURE", isSecure.ToString)
+            .WithEnvironment("ZITADEL_EXTERNALPORT", port.ToString())
+            .WithEnvironment("ZITADEL_EXTERNALDOMAIN", host);
     }
 
     /// <summary>

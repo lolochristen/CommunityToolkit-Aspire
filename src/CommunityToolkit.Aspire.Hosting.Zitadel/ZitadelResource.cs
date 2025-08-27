@@ -8,7 +8,8 @@ namespace Aspire.Hosting.ApplicationModel;
 /// <param name="admin"></param>
 /// <param name="adminPassword"></param>
 /// <param name="masterKey"></param>
-public class ZitadelResource(string name, ParameterResource? admin, ParameterResource adminPassword, ParameterResource masterKey)
+/// <param name="primaryEndpointName"></param>
+public class ZitadelResource(string name, ParameterResource? admin, ParameterResource adminPassword, ParameterResource masterKey, string primaryEndpointName)
     : ContainerResource(name), IResourceWithServiceDiscovery
 {
     private const string DefaultAdmin = "root";
@@ -17,13 +18,11 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
 
     private EndpointReference? _primaryEndpoint;
 
-    internal string PrimaryEndpointName { get; set; } = "http";
-
     /// <summary>
     ///     Gets the primary endpoint for the Grafana k6 instance.
     ///     This endpoint is used for all API calls over HTTP.
     /// </summary>
-    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, PrimaryEndpointName);
+    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, primaryEndpointName);
 
     /// <summary>
     /// </summary>
