@@ -39,19 +39,13 @@ public static class ZitadelAspireExtensions
                                                ParameterResourceBuilderExtensions.CreateGeneratedParameter(builder, $"{name}-masterkey", true,
                                                    new GenerateParameterDefault { MinLength = 32 });
 
-        var zitadel = new ZitadelResource (name, adminUsername?.Resource, passwordParameter, masterKeyParameter, useHttps ? "https" : "http");
+        var zitadel = new ZitadelResource(name, adminUsername?.Resource, passwordParameter, masterKeyParameter, useHttps ? "https" : "http");
 
         var zitadelBuilder = builder
             .AddResource(zitadel)
             .WithImage(ZitadelContainerImageTags.Image)
             .WithImageRegistry(ZitadelContainerImageTags.Registry)
             .WithImageTag(ZitadelContainerImageTags.Tag)
-            // zitadel does not support generic otlp paramters yet, pending request to support it.
-            // .WithOtlpExporter()
-            // current oltp parameters only support non-authorized endpoints.
-            // .WithEnvironment("ZITADEL_TRACING_TYPE", "otel")
-            // .WithEnvironment("ZITADEL_TRACING_ENDPOINT", builder.Configuration.GetValue<string>("ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"))
-            // .WithEnvironment("ZITADEL_TRACING_SERVICENAME", name)
             .WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "false") // when login client is used, parameters will be true
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED", "false")
             .WithEnvironment(context =>
@@ -102,7 +96,7 @@ public static class ZitadelAspireExtensions
                 .WithEnvironment("ZITADEL_TLS_ENABLED", "true")
                 .WithHttpHealthCheck("debug/healthz", endpointName: "https")
                 .WithExternalDomain("https");
-  }
+        }
         else
         {
             zitadelBuilder.WithHttpEndpoint(port, DefaultContainerPort)
@@ -295,20 +289,6 @@ public static class ZitadelAspireExtensions
     /// <summary>
     /// </summary>
     /// <param name="builder"></param>
-    /// <param name="port"></param>
-    /// <returns></returns>
-    public static IResourceBuilder<ZitadelResource> WithHttpEndpoint(this IResourceBuilder<ZitadelResource> builder, int? port = null)
-    {
-        return builder.WithHttpEndpoint(port, DefaultContainerPort)
-            .WithEnvironment("ZITADEL_TLS_ENABLED", "false")
-            .WithEnvironment("ZITADEL_EXTERNALSECURE", "false")
-            .WithEnvironment("ZITADEL_EXTERNALPORT", builder.GetEndpoint("http").Property(EndpointProperty.Port))
-            .WithEnvironment("ZITADEL_EXTERNALDOMAIN", builder.GetEndpoint("http").Property(EndpointProperty.Host));
-    }
-
-    /// <summary>
-    /// </summary>
-    /// <param name="builder"></param>
     /// <param name="loginUser"></param>
     /// <returns></returns>
     public static IResourceBuilder<ZitadelResource> WithLoginClientKey(this IResourceBuilder<ZitadelResource> builder, string loginUser = "login-client")
@@ -389,6 +369,35 @@ public static class ZitadelAspireExtensions
         return login;
     }
 
+    /// <summary>
+    /// Configures the host port that the Zitadel resource is exposed on instead of using randomly assigned port.
+    /// </summary>
+    /// <param name="builder">The resource builder.</param>
+    /// <param name="port">The port to bind on the host. If <see langword="null"/> is used random port will be assigned.</param>
+    /// <returns>The <see cref="IResourceBuilder{T}"/>.</returns>
+    public static IResourceBuilder<ZitadelResource> WithHostPort(this IResourceBuilder<ZitadelResource> builder, int? port)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithEndpoint(builder.Resource.PrimaryEndpoint.EndpointName, endpoint =>
+        {
+            endpoint.Port = port;
+        });
+    }
+
+    /// <summary>
+    /// Configures the host port that the Zitadel resource is exposed on instead of using randomly assigned port.
+    /// </summary>
+    /// <param name="builder">The resource builder.</param>
+    /// <param name="port">The port to bind on the host. If <see langword="null"/> is used random port will be assigned.</param>
+    /// <returns>The <see cref="IResourceBuilder{T}"/>.</returns>
+    public static IResourceBuilder<ZitadelLoginClientResource> WithHostPort(this IResourceBuilder<ZitadelLoginClientResource> builder, int? port)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithEndpoint(ZitadelLoginClientResource.PrimaryEndpointName, endpoint =>
+        {
+            endpoint.Port = port;
+        });
+    }
 
     /// <summary>
     ///     Initializes the Zitadel resource with the provided initialization function.

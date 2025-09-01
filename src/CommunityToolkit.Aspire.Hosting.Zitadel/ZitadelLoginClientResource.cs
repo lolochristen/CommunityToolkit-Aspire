@@ -8,13 +8,14 @@ public class ZitadelLoginClientResource(string name, ParameterResource? accessTo
     : ContainerResource(name), IResourceWithServiceDiscovery
 {
     internal const string BasePath = "/ui/v2/login";
+    internal const string PrimaryEndpointName = "http";
 
     private EndpointReference? _primaryEndpoint;
 
     /// <summary>
     ///     Gets the primary endpoint for the Zitadel Login instance.
     /// </summary>
-    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, "http");
+    public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, PrimaryEndpointName);
 
     /// <summary>
     ///     Gets the Zitadel base endpoint reference.
