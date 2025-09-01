@@ -316,57 +316,57 @@ public static class ZitadelAspireExtensions
 
     /// <summary>
     /// </summary>
-    /// <param name="zitadel"></param>
+    /// <param name="builder"></param>
     /// <param name="name"></param>
     /// <param name="port"></param>
     /// <param name="loginUser"></param>
     /// <param name="serviceAccessToken"></param>
     /// <returns></returns>
-    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> zitadel, string name, int? port = null,
+    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> builder, string name, int? port = null,
         string loginUser = "login-client", IResourceBuilder<ParameterResource>? serviceAccessToken = null)
     {
-        string path = Path.GetFullPath($"./{zitadel.Resource.Name}-keys");
+        string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
 
         ParameterResource serviceAccessTokenParameter = serviceAccessToken?.Resource ??
                                                         new ParameterResource(name, @default => File.ReadAllText(Path.Combine(path, $"{loginUser}.pat")), true);
 
         ZitadelLoginClientResource loginClientResource = new(name, serviceAccessTokenParameter);
 
-        IResourceBuilder<ZitadelLoginClientResource> login = zitadel.ApplicationBuilder.AddResource(loginClientResource)
+        IResourceBuilder<ZitadelLoginClientResource> loginBuilder = builder.ApplicationBuilder.AddResource(loginClientResource)
             .WithImage(ZitadelContainerImageTags.LoginImage)
             .WithImageRegistry(ZitadelContainerImageTags.Registry)
             .WithImageTag(ZitadelContainerImageTags.LoginTag)
             .WithHttpEndpoint(port, DefaultContainerPortLoginClient)
-            .WithEnvironment("ZITADEL_API_URL", zitadel.Resource.PrimaryEndpoint)
+            .WithEnvironment("ZITADEL_API_URL", builder.Resource.PrimaryEndpoint)
             .WithEnvironment("NEXT_PUBLIC_BASE_PATH", ZitadelLoginClientResource.BasePath)
             .WithEnvironment("ZITADEL_SERVICE_USER_TOKEN", serviceAccessTokenParameter)
             .WithEnvironment("NODE_TLS_REJECT_UNAUTHORIZED", "0")
             .WithEnvironment("CUSTOM_REQUEST_HEADERS", "Host:localhost")
             .WithHttpHealthCheck(ZitadelLoginClientResource.BasePath + "/healthy", 200)
-            .WaitFor(zitadel);
+            .WaitFor(builder);
 
-        zitadel.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
+        builder.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
             .WithEnvironment(async context =>
             {
                 // workaround to resolve external address of login client
-                if (zitadel.ApplicationBuilder.ExecutionContext.IsRunMode)
+                if (builder.ApplicationBuilder.ExecutionContext.IsRunMode)
                 {
                     context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] =
-                        await login.Resource.BaseEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = await login.Resource.OidcLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = await login.Resource.OidcLogoutEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = await login.Resource.SamlLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                        await loginBuilder.Resource.BaseEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = await loginBuilder.Resource.OidcLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = await loginBuilder.Resource.OidcLogoutEndpoint.GetValueAsync(context.CancellationToken) ?? "";
+                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = await loginBuilder.Resource.SamlLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
                 }
                 else
                 {
-                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = login.Resource.BaseEndpoint;
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = login.Resource.OidcLoginEndpoint;
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = login.Resource.OidcLogoutEndpoint;
-                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = login.Resource.SamlLoginEndpoint;
+                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = loginBuilder.Resource.BaseEndpoint;
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = loginBuilder.Resource.OidcLoginEndpoint;
+                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = loginBuilder.Resource.OidcLogoutEndpoint;
+                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = loginBuilder.Resource.SamlLoginEndpoint;
                 }
             });
 
-        return login;
+        return loginBuilder;
     }
 
     /// <summary>
