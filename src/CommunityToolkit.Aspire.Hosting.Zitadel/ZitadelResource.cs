@@ -3,12 +3,13 @@
 namespace Aspire.Hosting.ApplicationModel;
 
 /// <summary>
+/// Zitadel identity and access management container resource for Aspire applications.
 /// </summary>
-/// <param name="name"></param>
-/// <param name="admin"></param>
-/// <param name="adminPassword"></param>
-/// <param name="masterKey"></param>
-/// <param name="primaryEndpointName"></param>
+/// <param name="name">The unique name of the Zitadel resource.</param>
+/// <param name="admin">Optional admin username parameter resource.</param>
+/// <param name="adminPassword">Admin password parameter resource.</param>
+/// <param name="masterKey">Master encryption key parameter resource.</param>
+/// <param name="primaryEndpointName">Primary endpoint name for HTTP/HTTPS communication.</param>
 public class ZitadelResource(string name, ParameterResource? admin, ParameterResource adminPassword, ParameterResource masterKey, string primaryEndpointName)
     : ContainerResource(name), IResourceWithServiceDiscovery
 {
@@ -19,37 +20,43 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
     private EndpointReference? _primaryEndpoint;
 
     /// <summary>
-    ///     Gets the primary endpoint for the Grafana k6 instance.
-    ///     This endpoint is used for all API calls over HTTP.
+    /// Gets the primary endpoint for the Zitadel instance.
     /// </summary>
     public EndpointReference PrimaryEndpoint => _primaryEndpoint ??= new EndpointReference(this, primaryEndpointName);
 
     /// <summary>
+    /// Gets the admin username parameter resource.
     /// </summary>
     public ParameterResource? AdminUserNameParameter { get; } = admin;
 
+    /// <summary>
+    /// Gets a reference expression for the admin username.
+    /// </summary>
     internal ReferenceExpression AdminReference =>
         AdminUserNameParameter is not null ? ReferenceExpression.Create($"{AdminUserNameParameter}") : ReferenceExpression.Create($"{DefaultAdmin}");
 
     /// <summary>
+    /// Gets the admin password parameter resource.
     /// </summary>
     public ParameterResource AdminPasswordParameter { get; } = adminPassword ?? throw new ArgumentNullException(nameof(adminPassword));
 
     /// <summary>
+    /// Gets the master encryption key parameter resource.
     /// </summary>
     public ParameterResource MasterKeyParameter { get; } = masterKey ?? throw new ArgumentNullException(nameof(masterKey));
 
     /// <summary>
+    /// Gets or sets the file system path for machine user key files.
     /// </summary>
     public string? MachineUserKeyPath { get; set; }
 
     /// <summary>
-    ///     A dictionary where the key is the resource name and the value is the database name.
+    /// Gets the projects associated with this Zitadel instance.
     /// </summary>
     public IReadOnlyDictionary<string, string> Projects => _projects;
 
     /// <summary>
-    ///     Organization name used for the ZITADEL instance.
+    /// Gets or sets the organization name for the Zitadel instance.
     /// </summary>
     public string OrganizationName { get; set; } = "ZITADEL";
 

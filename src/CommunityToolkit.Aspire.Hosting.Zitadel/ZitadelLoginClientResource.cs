@@ -1,6 +1,7 @@
 namespace Aspire.Hosting.ApplicationModel;
 
 /// <summary>
+/// Represents a Zitadel Login client resource that provides authentication endpoints for applications.
 /// </summary>
 /// <param name="name"></param>
 /// <param name="accessToken"></param>
