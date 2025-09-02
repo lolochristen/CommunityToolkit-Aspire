@@ -70,7 +70,7 @@ public static class McpInspectorResourceBuilderExtensions
 
                 var servers = inspectorResource.McpServers.ToDictionary(s => s.Name, s => new
                 {
-                    transport = s.TransportType switch
+                    type = s.TransportType switch
                     {
                         McpTransportType.StreamableHttp => "streamable-http",
 #pragma warning disable CS0618
@@ -78,7 +78,7 @@ public static class McpInspectorResourceBuilderExtensions
 #pragma warning restore CS0618
                         _ => throw new NotSupportedException($"The transport type {s.TransportType} is not supported.")
                     },
-                    endpoint = s.Endpoint.Url
+                    url = Combine(s.Endpoint.Url, s.Path),
                 });
 
                 var config = new { mcpServers = servers };
@@ -183,18 +183,29 @@ public static class McpInspectorResourceBuilderExtensions
     /// <param name="mcpServer">The <see cref="IResourceBuilder{T}"/> for the MCP server resource.</param>
     /// <param name="isDefault">Indicates whether this MCP server should be considered the default server for the MCP Inspector.</param>
     /// <param name="transportType">The transport type to use for the MCP server. Defaults to <see cref="McpTransportType.StreamableHttp"/>.</param>
+    /// <param name="path">The path to use for MCP communication. Defaults to "/mcp".</param>
     /// <returns>A reference to the <see cref="IResourceBuilder{McpInspectorResource}"/> for further configuration.</returns>
     public static IResourceBuilder<McpInspectorResource> WithMcpServer<TResource>(
         this IResourceBuilder<McpInspectorResource> builder,
         IResourceBuilder<TResource> mcpServer,
         bool isDefault = true,
-        McpTransportType transportType = McpTransportType.StreamableHttp)
+        McpTransportType transportType = McpTransportType.StreamableHttp,
+        string path = "/mcp")
         where TResource : IResourceWithEndpoints
     {
         ArgumentNullException.ThrowIfNull(mcpServer);
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.Resource.AddMcpServer(mcpServer.Resource, isDefault, transportType);
+        builder.Resource.AddMcpServer(mcpServer.Resource, isDefault, transportType, path);
+
+        mcpServer.WithRelationship(builder.Resource, "Inspected By");
+        builder.WithRelationship(mcpServer.Resource, "Inspecting");
+
+        if (isDefault)
+        {
+            builder.WithRelationship(mcpServer.Resource, "Default Inspected Server");
+        }
+
         return builder;
     }
 
@@ -221,5 +232,29 @@ public static class McpInspectorResourceBuilderExtensions
                 ctx.Args.Add("--server");
                 ctx.Args.Add(defaultMcpServer?.Name ?? throw new InvalidOperationException("The MCP Inspector resource must have a default MCP server defined."));
             });
+    }
+
+    internal static Uri Combine(string baseUrl, params string[] segments)
+    {
+        if (string.IsNullOrEmpty(baseUrl))
+            throw new ArgumentException("baseUrl required", nameof(baseUrl));
+
+        if (segments == null || segments.Length == 0)
+            return new Uri(baseUrl, UriKind.RelativeOrAbsolute);
+
+        var baseUri = new Uri(baseUrl, UriKind.Absolute);
+
+        // If first segment is absolute URI, return it
+        if (Uri.IsWellFormedUriString(segments[0], UriKind.Absolute))
+            return new Uri(segments[0], UriKind.Absolute);
+
+        var escapedSegments = segments
+            .Where(s => !string.IsNullOrEmpty(s))
+            .SelectMany(s => s.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+            .Select(Uri.EscapeDataString);
+
+        var relative = string.Join("/", escapedSegments);
+
+        return new Uri(baseUri, relative);
     }
 }
