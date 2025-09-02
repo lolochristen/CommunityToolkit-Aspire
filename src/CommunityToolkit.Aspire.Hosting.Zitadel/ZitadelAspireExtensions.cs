@@ -1,8 +1,10 @@
 using Aspire.Hosting.ApplicationModel;
 using Microsoft.Extensions.DependencyInjection;
+using Org.BouncyCastle.Asn1.X509;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Text;
+using System.Xml.Linq;
 using Zitadel.Api;
 using Zitadel.Management.V1;
 using Zitadel.Project.V1;
@@ -11,6 +13,7 @@ using Zitadel.Project.V1;
 namespace Aspire.Hosting;
 
 /// <summary>
+/// Extension methods for adding and configuring Zitadel identity and access management resources in an Aspire application.
 /// </summary>
 public static class ZitadelAspireExtensions
 {
@@ -19,15 +22,17 @@ public static class ZitadelAspireExtensions
     private const string DatabaseToken = "Database=";
 
     /// <summary>
+    /// Adds a Zitadel identity and access management server container to the application builder with configurable authentication settings.
+    /// Zitadel provides OAuth 2.0, OIDC, and SAML authentication services for modern applications.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="name"></param>
-    /// <param name="useHttps"></param>
-    /// <param name="adminUsername"></param>
-    /// <param name="adminPassword"></param>
-    /// <param name="masterKey"></param>
-    /// <param name="port"></param>
-    /// <returns></returns>
+    /// <param name="builder">The distributed application builder to add the Zitadel resource to.</param>
+    /// <param name="name">The name of the Zitadel resource for service discovery and configuration.</param>
+    /// <param name="port">The optional host port to bind the Zitadel instance to. If not specified, a random port will be assigned.</param>
+    /// <param name="useHttps">Whether to enable HTTPS for the Zitadel instance. Default is false.</param>
+    /// <param name="adminUsername">Optional parameter resource for the admin username. If not provided, a default will be used.</param>
+    /// <param name="adminPassword">Optional parameter resource for the admin password. If not provided, a secure password will be generated.</param>
+    /// <param name="masterKey">Optional parameter resource for the master encryption key. If not provided, a secure key will be generated.</param>
+    /// <returns>A resource builder for the Zitadel resource that can be used for further configuration.</returns>
     public static IResourceBuilder<ZitadelResource> AddZitadel(this IDistributedApplicationBuilder builder, string name, int? port = null, bool useHttps = false, IResourceBuilder<ParameterResource>? adminUsername = null,
         IResourceBuilder<ParameterResource>? adminPassword = null, IResourceBuilder<ParameterResource>? masterKey = null)
     {
@@ -109,15 +114,20 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
+    /// Configures the Zitadel resource to use a PostgreSQL database for persistent storage of identity and access management data.
+    /// This method extracts connection information from the provided database resource and configures Zitadel environment variables.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="database"></param>
-    /// <param name="userPassword"></param>
-    /// <param name="sslModeEnabled"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with database settings.</param>
+    /// <param name="database">The PostgreSQL database resource with connection string information.</param>
+    /// <param name="userPassword">Optional parameter resource for the database user password. If not provided, a secure password will be generated.</param>
+    /// <param name="sslModeEnabled">Whether to enable SSL mode for database connections. Default is false.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithPostgresDatabase(this IResourceBuilder<ZitadelResource> builder,
         IResourceBuilder<IResourceWithConnectionString> database, IResourceBuilder<ParameterResource>? userPassword = null, bool sslModeEnabled = false)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(database);
+        
         ParameterResource userPasswordParameter = userPassword?.Resource ??
                                                   ParameterResourceBuilderExtensions.CreateDefaultPasswordParameter(builder.ApplicationBuilder,
                                                       $"{database.Resource.Name}-user-password");
@@ -176,12 +186,17 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
+    /// Configures a machine user for programmatic access to the Zitadel instance with API key authentication.
+    /// Creates a service account that can be used for server-to-server communication and API automation.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="machineUser"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with machine user settings.</param>
+    /// <param name="machineUser">The machine user name for the service account. Default is "admin".</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithMachineUser(this IResourceBuilder<ZitadelResource> builder, string machineUser = "admin")
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(machineUser);
+        
         string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
 
         builder.Resource.TryGetAnnotationsOfType<ContainerMountAnnotation>(out IEnumerable<ContainerMountAnnotation>? mountAnnotations);
@@ -207,10 +222,12 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
+    /// Configures the Zitadel resource to use the ASP.NET Core development certificate for HTTPS connections.
+    /// This method exports the development certificate and configures Zitadel to use it for TLS encryption.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="certificateDestinationPath"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with the development certificate.</param>
+    /// <param name="certificateDestinationPath">The container path where certificate files will be mounted. Default is "/certificate".</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithDeveloperCertificate(this IResourceBuilder<ZitadelResource> builder, string certificateDestinationPath = "/certificate")
     {
         var (certPath, keyPath) = ExportDevCertificate(builder.ApplicationBuilder);
@@ -218,14 +235,20 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
+    /// Configures the Zitadel resource to use a custom SSL certificate for HTTPS connections.
+    /// Allows specification of custom certificate and private key files for production scenarios.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="certificatePath"></param>
-    /// <param name="keyPath"></param>
-    /// <param name="certificateDestinationPath"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with certificate settings.</param>
+    /// <param name="certificatePath">The file system path to the SSL certificate file.</param>
+    /// <param name="keyPath">The file system path to the private key file corresponding to the certificate.</param>
+    /// <param name="certificateDestinationPath">The container path where certificate files will be mounted. Default is "/certificate".</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithCertificate(this IResourceBuilder<ZitadelResource> builder, string certificatePath, string keyPath, string certificateDestinationPath = "/certificate")
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(certificatePath);
+        ArgumentException.ThrowIfNullOrEmpty(keyPath);
+
         string certFileName = Path.GetFileName(certificatePath);
         string certKeyFileName = Path.GetFileName(keyPath);
 
@@ -247,52 +270,69 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// 
+    /// Configures the external domain settings for the Zitadel instance using an endpoint name.
+    /// This method retrieves the endpoint reference by name and configures external access settings.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="endpointName"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with external domain settings.</param>
+    /// <param name="endpointName">The name of the endpoint to use for external domain configuration.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, string endpointName)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(endpointName);
+
         var endpoint = builder.GetEndpoint(endpointName);
         return builder.WithExternalDomain(endpoint);
     }
 
     /// <summary>
-    /// 
+    /// Configures the external domain settings for the Zitadel instance using an endpoint reference.
+    /// Sets up how Zitadel identifies itself to external clients and handles redirects and callbacks.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="endpoint"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with external domain settings.</param>
+    /// <param name="endpoint">The endpoint reference containing host, port, and scheme information for external access.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, EndpointReference endpoint)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(endpoint);
+
         return builder.WithEnvironment("ZITADEL_EXTERNALSECURE", endpoint.Scheme == "https" ? "true" : "false")
             .WithEnvironment("ZITADEL_EXTERNALPORT", endpoint.Property(EndpointProperty.Port))
             .WithEnvironment("ZITADEL_EXTERNALDOMAIN", endpoint.Property(EndpointProperty.Host));
     }
 
     /// <summary>
-    /// 
+    /// Configures the external domain settings for the Zitadel instance with explicit parameters.
+    /// Allows direct specification of security, host, and port settings for external access configuration.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="isSecure"></param>
-    /// <param name="host"></param>
-    /// <param name="port"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with external domain settings.</param>
+    /// <param name="isSecure">Whether the external domain uses HTTPS (true) or HTTP (false).</param>
+    /// <param name="host">The external domain host name or IP address that clients will use to access Zitadel.</param>
+    /// <param name="port">The port number that clients will use to access Zitadel externally.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithExternalDomain(this IResourceBuilder<ZitadelResource> builder, bool isSecure, string host, int port)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(host);
+
         return builder.WithEnvironment("ZITADEL_EXTERNALSECURE", isSecure.ToString)
             .WithEnvironment("ZITADEL_EXTERNALPORT", port.ToString())
             .WithEnvironment("ZITADEL_EXTERNALDOMAIN", host);
     }
 
     /// <summary>
+    /// Configures a login client with personal access token for custom login UI integration.
+    /// Creates the necessary configuration for implementing a custom login interface that integrates with Zitadel's authentication flows.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="loginUser"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with login client settings.</param>
+    /// <param name="loginUser">The login client user name for the service account. Default is "login-client".</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithLoginClientKey(this IResourceBuilder<ZitadelResource> builder, string loginUser = "login-client")
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(loginUser);
+
         builder.Resource.TryGetAnnotationsOfType<ContainerMountAnnotation>(out IEnumerable<ContainerMountAnnotation>? mountAnnotations);
         if (mountAnnotations == null || mountAnnotations.All(m => m.Target != "/keys"))
         {
@@ -315,16 +355,21 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
+    /// Adds a Zitadel login client container for custom login UI functionality.
+    /// Deploys a Next.js-based login interface that provides a customizable authentication experience for end users.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="name"></param>
-    /// <param name="port"></param>
-    /// <param name="loginUser"></param>
-    /// <param name="serviceAccessToken"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to add the login client to.</param>
+    /// <param name="name">The name of the login client resource for service discovery and configuration.</param>
+    /// <param name="port">Optional host port for the login client. If not specified, a random port will be assigned.</param>
+    /// <param name="loginUser">The login user name for authentication with the Zitadel API. Default is "login-client".</param>
+    /// <param name="serviceAccessToken">Optional parameter resource for the service access token. If not provided, it will be read from the generated PAT file.</param>
+    /// <returns>A resource builder for the Zitadel login client resource that can be used for further configuration.</returns>
     public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> builder, string name, int? port = null,
         string loginUser = "login-client", IResourceBuilder<ParameterResource>? serviceAccessToken = null)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        
         string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
 
         ParameterResource serviceAccessTokenParameter = serviceAccessToken?.Resource ??
@@ -370,11 +415,12 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// Configures the host port that the Zitadel resource is exposed on instead of using randomly assigned port.
+    /// Configures a specific host port for the Zitadel resource instead of using a randomly assigned port.
+    /// This is useful for development scenarios where you need predictable port assignments.
     /// </summary>
-    /// <param name="builder">The resource builder.</param>
-    /// <param name="port">The port to bind on the host. If <see langword="null"/> is used random port will be assigned.</param>
-    /// <returns>The <see cref="IResourceBuilder{T}"/>.</returns>
+    /// <param name="builder">The Zitadel resource builder to configure with a specific port.</param>
+    /// <param name="port">The port to bind on the host. If null, a random port will be assigned.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithHostPort(this IResourceBuilder<ZitadelResource> builder, int? port)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -385,11 +431,12 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    /// Configures the host port that the Zitadel resource is exposed on instead of using randomly assigned port.
+    /// Configures a specific host port for the Zitadel login client resource instead of using a randomly assigned port.
+    /// This is useful for development scenarios where you need predictable port assignments for the login UI.
     /// </summary>
-    /// <param name="builder">The resource builder.</param>
-    /// <param name="port">The port to bind on the host. If <see langword="null"/> is used random port will be assigned.</param>
-    /// <returns>The <see cref="IResourceBuilder{T}"/>.</returns>
+    /// <param name="builder">The Zitadel login client resource builder to configure with a specific port.</param>
+    /// <param name="port">The port to bind on the host. If null, a random port will be assigned.</param>
+    /// <returns>The Zitadel login client resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelLoginClientResource> WithHostPort(this IResourceBuilder<ZitadelLoginClientResource> builder, int? port)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -400,45 +447,58 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    ///     Initializes the Zitadel resource with the provided initialization function.
+    /// Configures an initialization function that executes when the Zitadel resource becomes ready.
+    /// This allows for custom setup logic such as creating organizations, projects, or configuring initial settings.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="initialization"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with initialization logic.</param>
+    /// <param name="initialization">A function that takes Zitadel API client options and the resource, and performs initialization tasks.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithInitialization(this IResourceBuilder<ZitadelResource> builder,
         Func<Clients.Options, IResource, Task> initialization)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(initialization);
         return builder.WithAnnotation(new ZitadelInitializationAnnotation(initialization));
     }
 
     /// <summary>
+    /// Configures an initialization function that executes when the Zitadel project resource becomes ready.
+    /// This allows for custom project setup logic such as creating applications, roles, or configuring project-specific settings.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="initialization"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel project resource builder to configure with initialization logic.</param>
+    /// <param name="initialization">A function that takes Zitadel API client options and the project resource, and performs initialization tasks.</param>
+    /// <returns>The Zitadel project resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelProjectResource> WithInitialization(this IResourceBuilder<ZitadelProjectResource> builder,
         Func<Clients.Options, IResource, Task> initialization)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(initialization);
         return builder.WithAnnotation(new ZitadelInitializationAnnotation(initialization));
     }
 
     /// <summary>
+    /// Adds a Zitadel project resource for organizing applications and configurations within the Zitadel instance.
+    /// Projects in Zitadel are containers for applications, roles, and other identity management resources.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="name"></param>
-    /// <param name="projectName"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to add the project to.</param>
+    /// <param name="name">The resource name for service discovery and configuration.</param>
+    /// <param name="projectName">The display name of the project within Zitadel.</param>
+    /// <returns>A resource builder for the Zitadel project resource that can be used for further configuration.</returns>
     public static IResourceBuilder<ZitadelProjectResource> AddProject(this IResourceBuilder<ZitadelResource> builder, string name, string projectName)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(name);
         return builder.AddProject(name, new AddProjectRequest { Name = projectName });
     }
 
     /// <summary>
+    /// Adds a Zitadel project resource using a detailed project creation request.
+    /// This overload allows for more advanced project configuration options through the AddProjectRequest parameter.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="name"></param>
-    /// <param name="projectRequest"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to add the project to.</param>
+    /// <param name="name">The resource name for service discovery and configuration.</param>
+    /// <param name="projectRequest">A detailed project creation request containing all project configuration options.</param>
+    /// <returns>A resource builder for the Zitadel project resource that can be used for further configuration.</returns>
     public static IResourceBuilder<ZitadelProjectResource> AddProject(this IResourceBuilder<ZitadelResource> builder, string name, AddProjectRequest projectRequest)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -458,13 +518,16 @@ public static class ZitadelAspireExtensions
     }
 
     /// <summary>
-    ///     Sets the organization name for the ZITADEL instance.
+    /// Sets the organization name for the Zitadel instance.
+    /// The organization is the top-level container for all identity and access management resources in Zitadel.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="organizationName"></param>
-    /// <returns></returns>
+    /// <param name="builder">The Zitadel resource builder to configure with the organization name.</param>
+    /// <param name="organizationName">The name of the organization to create or use in the Zitadel instance.</param>
+    /// <returns>The Zitadel resource builder for method chaining.</returns>
     public static IResourceBuilder<ZitadelResource> WithOrganizationName(this IResourceBuilder<ZitadelResource> builder, string organizationName)
     {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(organizationName);
         builder.Resource.OrganizationName = organizationName;
         return builder.WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_NAME", organizationName);
     }
