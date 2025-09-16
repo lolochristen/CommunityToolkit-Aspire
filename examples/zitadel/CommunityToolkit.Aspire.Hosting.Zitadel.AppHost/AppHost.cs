@@ -3,8 +3,7 @@ using Projects;
 
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
-IResourceBuilder<PostgresServerResource> postgres = builder.AddPostgres("postgres")
-    .WithDataVolume();
+IResourceBuilder<PostgresServerResource> postgres = builder.AddPostgres("postgres");
 
 IResourceBuilder<PostgresDatabaseResource> database = postgres.AddDatabase("zitadel-db", "zitadel");
 
@@ -15,33 +14,21 @@ var zitadel = builder.AddZitadel("zitadel", port: 8501, useHttps: true)
     .WithOrganizationName("ASPIRE")
     .WithMachineUser()
     .WithLoginClientKey()
-    .WithInitialization(ZitadelInitialization.Initialize);
+    .WithInitialization(CustomZitadelInitialization.Initialize);
 
 zitadel.AddZitadelLoginClient("zitadel-login", port: 8503)
     .WithExternalHttpEndpoints();
 
 var project = zitadel.AddProject("zitadel-project", "Aspire")
-    .WithInitialization(ZitadelInitialization.InitializeProject);
+    .WithInitialization(CustomZitadelInitialization.InitializeProject);
 
-var web = builder.AddProject<CommunityToolkit_Aspire_Hosting_Zitadel_Web>("webfrontend")
+builder.AddProject<CommunityToolkit_Aspire_Hosting_Zitadel_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
     .WithReference(zitadel)
     .WithEnvironment("OpenIDConnectSettings__Authority", zitadel.Resource.PrimaryEndpoint)
+    .WithEnvironment("OpenIDConnectSettings__ClientId", () => CustomZitadelInitialization.ClientId)
+    .WithEnvironment("OpenIDConnectSettings__ClientSecret", () => CustomZitadelInitialization.ClientSecret)
     .WaitFor(project);
-
-if (builder.ExecutionContext.IsRunMode)
-{
-    web.WithEnvironment("OpenIDConnectSettings__ClientId", () => ZitadelInitialization.ClientId);
-    web.WithEnvironment("OpenIDConnectSettings__ClientSecret", () => ZitadelInitialization.ClientSecret);
-}
-else
-{
-    var clientIdParam = builder.AddParameter("clientId");
-    var clientSecretParam = builder.AddParameter("clientSecret", true);
-
-    web.WithEnvironment("OpenIDConnectSettings__ClientId", clientIdParam);
-    web.WithEnvironment("OpenIDConnectSettings__ClientSecret", clientSecretParam);
-}
 
 await builder.Build().RunAsync();

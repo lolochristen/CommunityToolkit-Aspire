@@ -10,7 +10,7 @@ namespace CommunityToolkit.Aspire.Hosting.Zitadel.AppHost;
 /// <summary>
 /// 
 /// </summary>
-public static class ZitadelInitialization
+public static class CustomZitadelInitialization
 {
     public static string ClientId { get; set; } = string.Empty;
     public static string ClientSecret { get; set; } = string.Empty;
@@ -50,14 +50,14 @@ public static class ZitadelInitialization
 
             ClientId = oidcApp.ClientId;
             ClientSecret = oidcApp.ClientSecret;
-            await File.WriteAllTextAsync("./zitadel-keys/webfrontend-oidc.key", ClientSecret);
+            await File.WriteAllTextAsync("./.zitadel/zitadel-keys/webfrontend-oidc.key", ClientSecret);
         }
         else
         {
             ClientId = appsResult.Result[0].OidcConfig.ClientId;
-            if (File.Exists("./zitadel-keys/webfrontend-oidc.key"))
+            if (File.Exists("./.zitadel/zitadel-keys/webfrontend-oidc.key"))
             {
-                ClientSecret = await File.ReadAllTextAsync("./zitadel-keys/webfrontend-oidc.key");
+                ClientSecret = await File.ReadAllTextAsync("./.zitadel/zitadel-keys/webfrontend-oidc.key");
             }
         }
 

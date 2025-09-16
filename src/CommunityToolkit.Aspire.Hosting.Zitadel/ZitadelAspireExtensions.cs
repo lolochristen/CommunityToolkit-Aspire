@@ -71,7 +71,7 @@ public static class ZitadelAspireExtensions
                     {
                         if (options == null)
                         {
-                            options = zitadel.CreateApiClientOptions();
+                            options = await zitadel.CreateApiClientOptions(ct);
                         }
 
                         await annotation.Initialization.Invoke(options, zitadel);
@@ -87,7 +87,7 @@ public static class ZitadelAspireExtensions
                     {
                         if (options == null)
                         {
-                            options = zitadel.CreateApiClientOptions();
+                            options = await zitadel.CreateApiClientOptions(ct);
                         }
 
                         await CreateZitadelProject(options, zitadelProject, notificationService);
@@ -190,33 +190,34 @@ public static class ZitadelAspireExtensions
     /// Creates a service account that can be used for server-to-server communication and API automation.
     /// </summary>
     /// <param name="builder">The Zitadel resource builder to configure with machine user settings.</param>
-    /// <param name="machineUser">The machine user name for the service account. Default is "admin".</param>
+    /// <param name="machineUserKeyParameter">The machine user key as a parameter. It's a base64 encoded json key.</param>
+    /// <param name="machineUserName">The machine user name for the service account. Default is "admin".</param>
     /// <returns>The Zitadel resource builder for method chaining.</returns>
-    public static IResourceBuilder<ZitadelResource> WithMachineUser(this IResourceBuilder<ZitadelResource> builder, string machineUser = "admin")
+    public static IResourceBuilder<ZitadelResource> WithMachineUser(this IResourceBuilder<ZitadelResource> builder, ParameterResource? machineUserKeyParameter = null, string machineUserName = "admin")
     {
         ArgumentNullException.ThrowIfNull(builder);
-        ArgumentException.ThrowIfNullOrEmpty(machineUser);
-        
-        string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
+        ArgumentException.ThrowIfNullOrEmpty(machineUserName);
 
+        if (machineUserKeyParameter != null)
+        {
+            builder.Resource.MachineUserKeyParameter = machineUserKeyParameter;
+            return builder;
+        }
+
+        string path = GetLocalKeysPath(builder.Resource.Name);
         builder.Resource.TryGetAnnotationsOfType<ContainerMountAnnotation>(out IEnumerable<ContainerMountAnnotation>? mountAnnotations);
         if (mountAnnotations == null || mountAnnotations.All(m => m.Target != "/keys"))
         {
-            if (!Directory.Exists(path))
-            {
-                Directory.CreateDirectory(path);
-            }
-
             builder.WithBindMount(path, "/keys");
         }
 
         builder
-            .WithEnvironment("ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH", $"/keys/{machineUser}.json")
-            .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME", machineUser)
+            .WithEnvironment("ZITADEL_FIRSTINSTANCE_MACHINEKEYPATH", $"/keys/{machineUserName}.json")
+            .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME", machineUserName)
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME", "Automatically Initialized IAM_OWNER")
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINEKEY_TYPE", "1");
 
-        builder.Resource.MachineUserKeyPath = Path.Combine(path, $"{machineUser}.json");
+        builder.Resource.MachineUserKeyPath = Path.Combine(path, $"{machineUserName}.json");
 
         return builder;
     }
@@ -336,12 +337,7 @@ public static class ZitadelAspireExtensions
         builder.Resource.TryGetAnnotationsOfType<ContainerMountAnnotation>(out IEnumerable<ContainerMountAnnotation>? mountAnnotations);
         if (mountAnnotations == null || mountAnnotations.All(m => m.Target != "/keys"))
         {
-            string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
-            if (!Directory.Exists(path))
-            {
-                Directory.CreateDirectory(path);
-            }
-
+            string path = GetLocalKeysPath(builder.Resource.Name);
             builder.WithBindMount(path, "/keys");
         }
 
@@ -370,8 +366,7 @@ public static class ZitadelAspireExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrEmpty(name);
         
-        string path = Path.GetFullPath($"./{builder.Resource.Name}-keys");
-
+        string path = GetLocalKeysPath(builder.Resource.Name);
         ParameterResource serviceAccessTokenParameter = serviceAccessToken?.Resource ??
                                                         new ParameterResource(name, @default => File.ReadAllText(Path.Combine(path, $"{loginUser}.pat")), true);
 
@@ -614,5 +609,15 @@ public static class ZitadelAspireExtensions
         }
 
         throw new InvalidOperationException("HTTPS dev certificate export failed for an unknown reason");
+    }
+
+    private static string GetLocalKeysPath(string name, bool ensureExists = true)
+    {
+        var path = Path.GetFullPath($"./.zitadel/{name}-keys");
+        if (ensureExists && !Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+        return path;
     }
 }

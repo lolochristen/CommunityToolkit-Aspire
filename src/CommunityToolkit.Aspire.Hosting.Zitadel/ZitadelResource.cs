@@ -1,5 +1,4 @@
 // ReSharper disable once CheckNamespace
-
 namespace Aspire.Hosting.ApplicationModel;
 
 /// <summary>
@@ -49,6 +48,11 @@ public class ZitadelResource(string name, ParameterResource? admin, ParameterRes
     /// Gets or sets the file system path for machine user key files.
     /// </summary>
     public string? MachineUserKeyPath { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public ParameterResource? MachineUserKeyParameter { get; internal set; }
 
     /// <summary>
     /// Gets the projects associated with this Zitadel instance.
