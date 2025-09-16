@@ -8,9 +8,9 @@ internal static class ZitadelContainerImageTags
 
     public const string Image = "zitadel/zitadel";
 
-    public const string Tag = "v4.0.3";
+    public const string Tag = "v4.2.0";
 
     public const string LoginImage = "zitadel/zitadel-login";
 
-    public const string LoginTag = "v4.0.3";
+    public const string LoginTag = "v4.2.0";
 }
