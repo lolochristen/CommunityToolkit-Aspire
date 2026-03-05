@@ -18,4 +18,25 @@ public sealed class ZitadelResource(string name) : ContainerResource(name)
     /// The parameter that contains the (default) Zitadel admin password.
     /// </summary>
     public required ParameterResource AdminPasswordParameter { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public ParameterResource? ServiceAccountNameParameter { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public ParameterResource? ServiceAccountKeyParameter { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public ParameterResource? LoginClientUsernameParameter { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public ParameterResource? LoginClientAccessTokenParameter { get; set; }
+
 }
