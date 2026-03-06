@@ -115,24 +115,24 @@ public static class ZitadelHostingExtensions
             {
                 // store keys
 #pragma warning disable ASPIREUSERSECRETS001
-                if (zitadelResource.ServiceAccountKeyParameter != null && zitadelResource.ServiceAccountNameParameter != null)
+                if (zitadelResource.MachineServiceAccountKeyParameter != null && zitadelResource.MachineServiceAccountNameParameter != null)
                 {
-                    var serviceAccountName = await zitadelResource.ServiceAccountNameParameter.GetValueAsync(cancellationToken);
+                    var serviceAccountName = await zitadelResource.MachineServiceAccountNameParameter.GetValueAsync(cancellationToken);
                     var keyPath = Path.Combine(GetLocalKeysPath(zitadelBuilder.Resource.Name), $"{serviceAccountName}.json");
                     if (File.Exists(keyPath))
                     {
-                        var secretName = $"Parameters:{zitadelResource.ServiceAccountKeyParameter.Name}";
+                        var secretName = $"Parameters:{zitadelResource.MachineServiceAccountKeyParameter.Name}";
                         zitadelBuilder.ApplicationBuilder.UserSecretsManager.TrySetSecret(secretName, await File.ReadAllTextAsync(keyPath, cancellationToken));
                     }
                 }
 
-                if (zitadelResource.LoginClientAccessTokenParameter != null && zitadelResource.LoginClientUsernameParameter != null)
+                if (zitadelResource.LoginServiceAccountTokenParameter != null && zitadelResource.LoginServiceAccountNameParameter != null)
                 {
-                    var serviceAccountName = await zitadelResource.LoginClientUsernameParameter.GetValueAsync(cancellationToken);
+                    var serviceAccountName = await zitadelResource.LoginServiceAccountNameParameter.GetValueAsync(cancellationToken);
                     var keyPath = Path.Combine(GetLocalKeysPath(zitadelBuilder.Resource.Name), $"{serviceAccountName}.pat");
                     if (File.Exists(keyPath))
                     {
-                        var secretName = $"Parameters:{zitadelResource.LoginClientAccessTokenParameter.Name}";
+                        var secretName = $"Parameters:{zitadelResource.LoginServiceAccountTokenParameter.Name}";
                         var pat = await File.ReadAllTextAsync(keyPath, cancellationToken);
                         zitadelBuilder.ApplicationBuilder.UserSecretsManager.TrySetSecret(secretName, pat.Trim(' ', '\n'));
                     }
@@ -222,14 +222,63 @@ public static class ZitadelHostingExtensions
     }
 
     /// <summary>
+    /// Configures the resource builder to use the specified organization name for the Zitadel instance.
+    /// </summary>
+    /// <param name="builder">The resource builder to configure.</param>
+    /// <param name="orgName">The name of the organization to set. This value must not be null, empty, or consist only of white-space
+    /// characters.</param>
+    /// <returns>The resource builder instance with the organization name configured.</returns>
+    public static IResourceBuilder<ZitadelResource> WithOrganizationName(
+        this IResourceBuilder<ZitadelResource> builder,
+        string orgName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(orgName);
+
+        return builder.WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_NAME", orgName);
+    }
+
+
+    /// <summary>
+    /// Configures the resource builder to use the specified instance name for the Zitadel resource.
+    /// </summary>
+    /// <param name="builder">The resource builder to configure with the instance name.</param>
+    /// <param name="instance">The name of the instance to associate with the resource. This value cannot be null or whitespace.</param>
+    /// <returns>The updated resource builder configured with the specified instance name.</returns>
+    public static IResourceBuilder<ZitadelResource> WithInstanceName(
+        this IResourceBuilder<ZitadelResource> builder,
+        string instance)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instance);
+
+        return builder.WithEnvironment("ZITADEL_FIRSTINSTANCE_INSTANCENAME", instance);
+    }
+
+    /// <summary>
+    /// Configures the resource builder to set the default language for the Zitadel instance.
+    /// </summary>
+    /// <param name="builder">The resource builder to configure with the default language setting.</param>
+    /// <param name="languageCode">The language code to set as the default language. This value must not be null or consist only of white-space
+    /// characters.</param>
+    /// <returns>The resource builder instance configured with the specified default language.</returns>
+    public static IResourceBuilder<ZitadelResource> WithDefaultLanguage(
+        this IResourceBuilder<ZitadelResource> builder,
+        string languageCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(languageCode);
+
+        return builder.WithEnvironment("ZITADEL_FIRSTINSTANCE_DEFAULTLANGUAGE", languageCode);
+    }
+
+
+    /// <summary>
     /// Configures a service account user for programmatic access to the Zitadel instance with API key authentication.
     /// Creates a service account that can be used for server-to-server communication and API automation.
     /// </summary>
     /// <param name="builder">The Zitadel resource builder to configure with machine user settings.</param>
-    /// <param name="serviceAccountName">The machine user name for the service account. Default is "admin".</param>
-    /// <param name="serviceAccountKey"></param>
+    /// <param name="serviceAccountName">The user name for the service account. Default is "admin".</param>
+    /// <param name="serviceAccountKey">The parameter to receive/store the created key</param>
     /// <returns>The Zitadel resource builder for method chaining.</returns>
-    public static IResourceBuilder<ZitadelResource> WithServiceAccount(this IResourceBuilder<ZitadelResource> builder,
+    public static IResourceBuilder<ZitadelResource> WithMachineServiceAccount(this IResourceBuilder<ZitadelResource> builder,
         IResourceBuilder<ParameterResource>? serviceAccountName = null,
         IResourceBuilder<ParameterResource>? serviceAccountKey = null)
     {
@@ -238,8 +287,6 @@ public static class ZitadelHostingExtensions
         string path = GetLocalKeysPath(builder.Resource.Name);
         var serviceAccountNameParameter = serviceAccountName?.Resource ?? 
                                           new ParameterResource($"{builder.Resource.Name}-service-account", _ => "admin", false);
-
-        builder.ApplicationBuilder.CreateResourceBuilder<ParameterResource>(serviceAccountNameParameter);
 
         var keyParamName = $"{builder.Resource.Name}-service-account-key";
         var serviceAccountKeyParameter = serviceAccountKey?.Resource ??
@@ -259,8 +306,8 @@ public static class ZitadelHostingExtensions
                                                  return string.Empty;
                                              }, true);
 
-        builder.Resource.ServiceAccountKeyParameter = serviceAccountKeyParameter;
-        builder.Resource.ServiceAccountNameParameter = serviceAccountNameParameter;
+        builder.Resource.MachineServiceAccountNameParameter = serviceAccountNameParameter;
+        builder.Resource.MachineServiceAccountKeyParameter = serviceAccountKeyParameter;
 
         builder
             .WithKeysMount()
@@ -272,10 +319,8 @@ public static class ZitadelHostingExtensions
         return builder;
     }
 
-    
-
     /// <summary>
-    /// Mounts the keys directory of Zitadel to a local directory.
+    /// Mounts the keys directory of Zitadel to a local directory to receive created keys and pats.
     /// </summary>
     /// <param name="builder">The Zitadel resource builder to configure.</param>
     /// <param name="source">Source directory to mount</param>
@@ -298,24 +343,24 @@ public static class ZitadelHostingExtensions
     /// Creates the necessary configuration for implementing a custom login interface that integrates with Zitadel's authentication flows.
     /// </summary>
     /// <param name="builder">The Zitadel resource builder to configure with login client settings.</param>
-    /// <param name="loginClientAccessToken"></param>
+    /// <param name="serviceAccountToken"></param>
     /// <param name="expirationDate">Optional expiration date. Default today + 5y</param>
-    /// <param name="loginClientUsername"></param>
+    /// <param name="serviceAccountName"></param>
     /// <returns>The Zitadel resource builder for method chaining.</returns>
-    public static IResourceBuilder<ZitadelResource> WithLoginClientUser(this IResourceBuilder<ZitadelResource> builder,
-        IResourceBuilder<ParameterResource>? loginClientUsername = null,
-        IResourceBuilder<ParameterResource>? loginClientAccessToken = null,
+    public static IResourceBuilder<ZitadelResource> WithLoginServiceAccount(this IResourceBuilder<ZitadelResource> builder,
+        IResourceBuilder<ParameterResource>? serviceAccountName = null,
+        IResourceBuilder<ParameterResource>? serviceAccountToken = null,
         DateTimeOffset? expirationDate = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
         string path = GetLocalKeysPath(builder.Resource.Name);
 
-        var loginClientUsernameParameter = loginClientUsername?.Resource ??
+        var serviceAccountNameParameter = serviceAccountName?.Resource ??
                                           new ParameterResource($"{builder.Resource.Name}-login-client", _ => "login-client", false);
 
         var tokenParamName = $"{builder.Resource.Name}-login-client-token";
-        var loginClientAccessTokenParameter = loginClientAccessToken?.Resource ??
+        var serviceAccountTokenParameter = serviceAccountToken?.Resource ??
                                          new ParameterResource(tokenParamName,
                                              _ =>
                                              {
@@ -323,7 +368,7 @@ public static class ZitadelHostingExtensions
 
                                                  if (!string.IsNullOrWhiteSpace(value)) return value;
 
-                                                 var filePath = Path.Combine(path, $"{loginClientUsernameParameter.GetValueAsync(CancellationToken.None).Result}.pat");
+                                                 var filePath = Path.Combine(path, $"{serviceAccountNameParameter.GetValueAsync(CancellationToken.None).Result}.pat");
                                                  if (File.Exists(filePath))
                                                  {
                                                      return File.ReadAllText(filePath);
@@ -332,13 +377,13 @@ public static class ZitadelHostingExtensions
                                                  return string.Empty;
                                              }, true);
 
-        builder.Resource.LoginClientUsernameParameter = loginClientUsernameParameter;
-        builder.Resource.LoginClientAccessTokenParameter = loginClientAccessTokenParameter;
+        builder.Resource.LoginServiceAccountNameParameter = serviceAccountNameParameter;
+        builder.Resource.LoginServiceAccountTokenParameter = serviceAccountTokenParameter;
 
         builder
             .WithKeysMount()
-            .WithEnvironment("ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH", $"/keys/{loginClientUsernameParameter}.pat")
-            .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME", loginClientUsernameParameter)
+            .WithEnvironment("ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH", $"/keys/{serviceAccountNameParameter}.pat")
+            .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME", serviceAccountNameParameter)
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME", "Automatically Initialized IAM_LOGIN_CLIENT")
             .WithEnvironment("ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE", (expirationDate ?? DateTime.UtcNow.AddYears(5)).ToString("yyyy-MM-ddTHH:mm:ssZ"));
 
@@ -349,80 +394,57 @@ public static class ZitadelHostingExtensions
     /// Adds a Zitadel login client container for custom login UI functionality.
     /// Deploys a Next.js-based login interface that provides a customizable authentication experience for end users.
     /// </summary>
-    /// <param name="zitadelBuilder">The Zitadel resource builder to add the login client to.</param>
+    /// <param name="builder">The Zitadel resource builder to add the login client to.</param>
     /// <param name="name">The name of the login client resource for service discovery and configuration.</param>
     /// <param name="port">Optional host port for the login client. If not specified, a random port will be assigned.</param>
-    /// <param name="accessToken">Optional parameter resource for the service access token. If not provided, it will be read from the generated PAT file.</param>
+    /// <param name="serviceAccountToken">Optional parameter resource for the service access token. If not provided, it will be read from the generated PAT file.</param>
     /// <returns>A resource builder for the Zitadel login client resource that can be used for further configuration.</returns>
-    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> zitadelBuilder, 
+    public static IResourceBuilder<ZitadelLoginClientResource> AddZitadelLoginClient(this IResourceBuilder<ZitadelResource> builder, 
         string name, 
         int? port = null,
-        IResourceBuilder<ParameterResource>? accessToken = null)
+        IResourceBuilder<ParameterResource>? serviceAccountToken = null)
     {
-        ArgumentNullException.ThrowIfNull(zitadelBuilder);
+        ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrEmpty(name);
 
-        var builder = zitadelBuilder.ApplicationBuilder;
+        var accessTokenParameter = serviceAccountToken?.Resource ?? builder.Resource.LoginServiceAccountTokenParameter ?? throw new ArgumentException("access token missing");
 
-        ParameterResource accessTokenParameter = accessToken?.Resource ??
-                                                        zitadelBuilder.Resource.LoginClientAccessTokenParameter ?? throw new ArgumentException("access token missing");
+        var loginClientResource = new ZitadelLoginClientResource(name, accessTokenParameter);
 
-        ZitadelLoginClientResource loginClientResource = new(name, accessTokenParameter);
-
-        IResourceBuilder<ZitadelLoginClientResource> loginBuilder = zitadelBuilder.ApplicationBuilder.AddResource(loginClientResource)
+        var loginClientBuilder = builder.ApplicationBuilder.AddResource(loginClientResource)
             .WithImage(ZitadelContainerImageTags.LoginImage)
             .WithImageRegistry(ZitadelContainerImageTags.Registry)
             .WithImageTag(ZitadelContainerImageTags.LoginTag)
             .WithHttpEndpoint(port, 3000)
-            .WithEnvironment("ZITADEL_API_URL", zitadelBuilder.Resource.GetEndpoint(ZitadelResource.HttpEndpointName))
+            .WithEnvironment("ZITADEL_API_URL", builder.Resource.GetEndpoint(ZitadelResource.HttpEndpointName))
             .WithEnvironment("NEXT_PUBLIC_BASE_PATH", ZitadelLoginClientResource.BasePath)
             .WithEnvironment("ZITADEL_SERVICE_USER_TOKEN", accessTokenParameter)
             .WithEnvironment("NODE_TLS_REJECT_UNAUTHORIZED", "0")
             .WithEnvironment("CUSTOM_REQUEST_HEADERS", "Host:localhost")
+            .WithEnvironment("HOSTNAME", "0.0.0.0")
+            .WithOtlpExporter()
             .WithHttpHealthCheck(ZitadelLoginClientResource.BasePath + "/healthy", 200)
-            .WaitFor(zitadelBuilder);
+            .WaitFor(builder);
 
-        zitadelBuilder.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
-            .WithEnvironment(async context =>
-            {
-                // workaround to resolve external address of login client
-                if (zitadelBuilder.ApplicationBuilder.ExecutionContext.IsRunMode)
-                {
-                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] =
-                        await loginBuilder.Resource.BaseEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = await loginBuilder.Resource.OidcLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = await loginBuilder.Resource.OidcLogoutEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = await loginBuilder.Resource.SamlLoginEndpoint.GetValueAsync(context.CancellationToken) ?? "";
-                }
-                else
-                {
-                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = loginBuilder.Resource.BaseEndpoint;
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGINURLV2"] = loginBuilder.Resource.OidcLoginEndpoint;
-                    context.EnvironmentVariables["ZITADEL_OIDC_DEFAULTLOGOUTURLV2"] = loginBuilder.Resource.OidcLogoutEndpoint;
-                    context.EnvironmentVariables["ZITADEL_SAML_DEFAULTLOGINURLV2"] = loginBuilder.Resource.SamlLoginEndpoint;
-                }
-            });
+        builder.WithLoginClient(loginClientBuilder);
 
 #pragma warning disable ASPIRECERTIFICATES001
-        loginBuilder.WithHttpsCertificateConfiguration(ctx =>
+        loginClientBuilder.WithHttpsCertificateConfiguration(ctx =>
         {
             ctx.EnvironmentVariables["ZITADEL_TLS_ENABLED"] = "true";
             ctx.EnvironmentVariables["ZITADEL_TLS_CERTPATH"] = ctx.CertificatePath;
             ctx.EnvironmentVariables["ZITADEL_TLS_KEYPATH"] = ctx.KeyPath;
             return Task.CompletedTask;
         });
-#pragma warning restore ASPIRECERTIFICATES001
 
-
-        if (builder.ExecutionContext.IsRunMode)
+        if (builder.ApplicationBuilder.ExecutionContext.IsRunMode)
         {
-#pragma warning disable ASPIRECERTIFICATES001
-            builder.Eventing.Subscribe<BeforeStartEvent>((@event, cancellationToken) =>
+            builder.ApplicationBuilder.Eventing.Subscribe<BeforeStartEvent>((@event, cancellationToken) =>
             {
                 var developerCertificateService = @event.Services.GetRequiredService<IDeveloperCertificateService>();
 
                 bool addHttps = false;
-                if (!loginBuilder.Resource.TryGetLastAnnotation<HttpsCertificateAnnotation>(out var annotation))
+                if (!loginClientBuilder.Resource.TryGetLastAnnotation<HttpsCertificateAnnotation>(out var annotation))
                 {
                     if (developerCertificateService.UseForHttps)
                     {
@@ -440,7 +462,7 @@ public static class ZitadelHostingExtensions
                 {
                     // If a TLS certificate is configured, override the endpoint to use HTTPS instead of HTTP
                     // Zitadel only binds to a single port
-                    loginBuilder
+                    loginClientBuilder
                         .WithEndpoint(ZitadelLoginClientResource.HttpEndpointName, ep => ep.UriScheme = "https");
                 }
 
@@ -449,7 +471,53 @@ public static class ZitadelHostingExtensions
 #pragma warning restore ASPIRECERTIFICATES001
         }
 
-        return loginBuilder;
+        return loginClientBuilder;
+    }
+
+    /// <summary>
+    /// Configures Zitadel to use given Zitadel Login Client.
+    /// </summary>
+    /// <param name="builder">The Zitadel resource builder.</param>
+    /// <param name="loginClientBuilder">The Login Client resource builder.</param>
+    /// <returns>The resource builder for chaining.</returns>
+    public static IResourceBuilder<ZitadelResource> WithLoginClient(
+        this IResourceBuilder<ZitadelResource> builder,
+        IResourceBuilder<ZitadelLoginClientResource> loginClientBuilder)
+    {
+        return builder.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
+            .WithEnvironment(async context =>
+            {
+                if (builder.ApplicationBuilder.ExecutionContext.IsRunMode) 
+                {
+                    // workaround to resolve external address of login client
+                    var baseUri = await loginClientBuilder.Resource.BaseEndpoint.GetValueAsync(context.CancellationToken);
+                    if (string.IsNullOrWhiteSpace(baseUri))
+                        context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = loginClientBuilder.Resource.BaseEndpoint;
+                    else
+                        context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = baseUri;
+                }
+                else
+                {
+                    context.EnvironmentVariables["ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI"] = loginClientBuilder.Resource.BaseEndpoint;
+                }
+            });
+    }
+
+    /// <summary>
+    /// Configures the Base Uri of the Zitadel Login Client.
+    /// </summary>
+    /// <param name="builder">The Zitadel resource builder.</param>
+    /// <param name="loginClientBaseUri">Base Uri of Login Client</param>
+    /// <returns>The resource builder for chaining.</returns>
+    /// <exception cref="ArgumentException">Thrown if <paramref name="loginClientBaseUri"/> is null or whitespace.</exception>
+    public static IResourceBuilder<ZitadelResource> WithLoginClient(
+        this IResourceBuilder<ZitadelResource> builder,
+        string loginClientBaseUri)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(loginClientBaseUri);
+
+        return builder.WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "true")
+            .WithEnvironment("ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI", loginClientBaseUri);
     }
 
     private static string GetLocalKeysPath(string name, bool ensureExists = true)

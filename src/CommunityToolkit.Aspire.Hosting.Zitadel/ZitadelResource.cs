@@ -20,23 +20,23 @@ public sealed class ZitadelResource(string name) : ContainerResource(name)
     public required ParameterResource AdminPasswordParameter { get; set; }
 
     /// <summary>
-    /// 
+    /// The parameter that contains the machine service account name.
     /// </summary>
-    public ParameterResource? ServiceAccountNameParameter { get; set; }
+    public ParameterResource? MachineServiceAccountNameParameter { get; set; }
 
     /// <summary>
-    /// 
+    /// The parameter that contains the machine service account key.
     /// </summary>
-    public ParameterResource? ServiceAccountKeyParameter { get; set; }
+    public ParameterResource? MachineServiceAccountKeyParameter { get; set; }
 
     /// <summary>
-    /// 
+    /// The parameter that contains the login service account name.
     /// </summary>
-    public ParameterResource? LoginClientUsernameParameter { get; set; }
+    public ParameterResource? LoginServiceAccountNameParameter { get; set; }
 
     /// <summary>
-    /// 
+    /// The parameter that contains the login service account access token.
     /// </summary>
-    public ParameterResource? LoginClientAccessTokenParameter { get; set; }
+    public ParameterResource? LoginServiceAccountTokenParameter { get; set; }
 
 }
